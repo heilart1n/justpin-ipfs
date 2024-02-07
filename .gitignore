@@ -18,3 +18,5 @@
 /build/binary/*
 /build/package/*
 !/build/package/.gitkeep
+/vendor
+./vendor
