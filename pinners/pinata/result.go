@@ -1,0 +1,20 @@
+package pinata
+
+import "fmt"
+
+type Result struct {
+	hash string
+	link string
+}
+
+func (client *Client) NewResult(hash string) *Result {
+	return &Result{hash: hash, link: fmt.Sprintf(IPFSUrl, hash)}
+}
+
+func (result *Result) GetHash() string {
+	return result.hash
+}
+
+func (result *Result) GetLink() string {
+	return result.link
+}

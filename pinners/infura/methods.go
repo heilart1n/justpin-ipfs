@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/heilart1n/justpin-ipfs/file"
 	httpretry "github.com/heilart1n/justpin-ipfs/http"
+	"github.com/heilart1n/justpin-ipfs/pinners"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -18,10 +19,10 @@ func (client *Client) Name() string {
 
 // PinFile pins content to Infura by providing a file path, it returns an IPFS
 // hash and an error.
-func (client *Client) PinFile(fp string) (string, error) {
+func (client *Client) PinFile(fp string) (pinners.Result, error) {
 	mfr, err := file.NewMultiFileReader(fp, false, false)
 	if err != nil {
-		return "", fmt.Errorf("unexpected creates multipart file: %v", err)
+		return nil, fmt.Errorf("unexpected creates multipart file: %v", err)
 	}
 	boundary := "multipart/form-data; boundary=" + mfr.Boundary()
 
@@ -29,7 +30,7 @@ func (client *Client) PinFile(fp string) (string, error) {
 }
 
 // PinWithReader pins content to Infura by given io.Reader, it returns an IPFS hash and an error.
-func (client *Client) PinWithReader(rd io.Reader) (string, error) {
+func (client *Client) PinWithReader(rd io.Reader) (pinners.Result, error) {
 	r, w := io.Pipe()
 	m := multipart.NewWriter(w)
 	fn := file.RandString(6, "lower")
@@ -52,7 +53,7 @@ func (client *Client) PinWithReader(rd io.Reader) (string, error) {
 }
 
 // PinWithBytes pins content to Infura by given byte slice, it returns an IPFS hash and an error.
-func (client *Client) PinWithBytes(buf []byte) (string, error) {
+func (client *Client) PinWithBytes(buf []byte) (pinners.Result, error) {
 	r, w := io.Pipe()
 	m := multipart.NewWriter(w)
 	fn := file.RandString(6, "lower")
@@ -74,13 +75,13 @@ func (client *Client) PinWithBytes(buf []byte) (string, error) {
 	return client.pinFile(r, m.FormDataContentType())
 }
 
-func (client *Client) pinFile(r io.Reader, boundary string) (string, error) {
+func (client *Client) pinFile(r io.Reader, boundary string) (pinners.Result, error) {
 	endpoint := ApiUrl + "/api/v0/add?cid-version=1&pin=true"
 	httpClient := httpretry.NewClient(client.Client)
 
 	req, err := http.NewRequest(http.MethodPost, endpoint, r)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	client.setAuth(req)
 
@@ -88,14 +89,14 @@ func (client *Client) pinFile(r io.Reader, boundary string) (string, error) {
 	req.Header.Set("Content-Disposition", `form-data; name="files"`)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	// It limits anonymous requests to 12 write requests/min.
 	// https://infura.io/docs/ipfs#section/Rate-Limits/API-Anonymous-Requests
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf(resp.Status)
+		return nil, fmt.Errorf(resp.Status)
 	}
 
 	var out addEvent
@@ -109,12 +110,12 @@ loop:
 		case io.EOF:
 			break loop
 		default:
-			return "", err
+			return nil, err
 		}
 		out = evt
 	}
 
-	return out.Hash, nil
+	return client.NewResult(out.Hash), nil
 }
 
 // PinHash pins content to Infura by giving an IPFS hash, it returns the result and an error.
@@ -166,7 +167,7 @@ func (client *Client) PinHash(hash string) (bool, error) {
 
 // PinDir pins a directory to the NFT.Storage pinning service.
 // It alias to PinFile.
-func (client *Client) PinDir(name string) (string, error) {
+func (client *Client) PinDir(name string) (pinners.Result, error) {
 	return client.PinFile(name)
 }
 
@@ -176,7 +177,7 @@ func (client *Client) setAuth(req *http.Request) {
 	}
 }
 
-func (client *Client) Pin(path interface{}) (cid string, err error) {
+func (client *Client) Pin(path interface{}) (result pinners.Result, err error) {
 	err = fmt.Errorf("unsupported pinner")
 	switch v := path.(type) {
 	case string:
@@ -184,14 +185,14 @@ func (client *Client) Pin(path interface{}) (cid string, err error) {
 		if err != nil {
 			return
 		}
-		cid, err = client.PinFile(v)
+		result, err = client.PinFile(v)
 	case io.Reader:
-		cid, err = client.PinWithReader(v)
+		result, err = client.PinWithReader(v)
 	case []byte:
-		cid, err = client.PinWithBytes(v)
+		result, err = client.PinWithBytes(v)
 	}
 	if err != nil {
 		err = fmt.Errorf("%s: %w", client.Name(), err)
 	}
-	return cid, err
+	return result, err
 }

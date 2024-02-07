@@ -8,6 +8,7 @@ import (
 const (
 	APIUrl     = "https://api.web3.storage"
 	ClientName = "Web3Storage"
+	IPFSUrl    = "https://w3s.link/ipfs/%s"
 )
 
 // Client Web3Storage represents a Web3Storage configuration.

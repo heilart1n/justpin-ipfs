@@ -8,6 +8,7 @@ import (
 const (
 	APIUrl     = "https://api.nft.storage"
 	ClientName = "NFTStorage"
+	IPFSUrl    = "https://%s.ipfs.nftstorage.link/"
 )
 
 // Client NFTStorage represents an NFTStorage configuration.

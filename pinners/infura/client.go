@@ -8,6 +8,7 @@ import (
 const (
 	ApiUrl     = "https://ipfs.infura.io:5001"
 	ClientName = "Infura"
+	IPFSUrl    = "https://ipfs.infura.io:5001/api/v0/cat?arg=%s"
 )
 
 // Client represents an Infura configuration. If there is no Apikey or

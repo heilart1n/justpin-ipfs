@@ -9,6 +9,7 @@ const (
 	PinFileUrl = "https://api.pinata.cloud/pinning/pinFileToIPFS"
 	PinHashUrl = "https://api.pinata.cloud/pinning/pinByHash"
 	ClientName = "Pinata"
+	IPFSUrl    = "https://gateway.pinata.cloud/ipfs/%s"
 )
 
 // Client Pinata represents a Pinata configuration.

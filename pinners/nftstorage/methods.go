@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/heilart1n/justpin-ipfs/file"
 	httpretry "github.com/heilart1n/justpin-ipfs/http"
+	"github.com/heilart1n/justpin-ipfs/pinners"
 	"io"
 	"net/http"
 	"os"
@@ -18,17 +19,17 @@ func (client *Client) Name() string {
 
 // PinFile pins content to NFTStorage by providing a file path, it returns an IPFS
 // hash and an error.
-func (client *Client) PinFile(fp string) (string, error) {
+func (client *Client) PinFile(fp string) (pinners.Result, error) {
 	fi, err := os.Stat(fp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// For regular file
 	if fi.Mode().IsRegular() {
 		f, err := os.Open(fp)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
 		defer f.Close()
 
@@ -38,12 +39,12 @@ func (client *Client) PinFile(fp string) (string, error) {
 	// For directory, or etc
 	f, err := file.NewSerialFile(fp)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	mfr, err := file.CreateMultiForm(f, true)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	boundary := "multipart/form-data; boundary=" + mfr.Boundary()
 
@@ -51,50 +52,50 @@ func (client *Client) PinFile(fp string) (string, error) {
 }
 
 // PinWithReader pins content to NFTStorage by given io.Reader, it returns an IPFS hash and an error.
-func (client *Client) PinWithReader(rd io.Reader) (string, error) {
+func (client *Client) PinWithReader(rd io.Reader) (pinners.Result, error) {
 	return client.pinFile(rd, file.MediaType(rd))
 }
 
 // PinWithBytes pins content to NFTStorage by given byte slice, it returns an IPFS hash and an error.
-func (client *Client) PinWithBytes(buf []byte) (string, error) {
+func (client *Client) PinWithBytes(buf []byte) (pinners.Result, error) {
 	return client.pinFile(bytes.NewReader(buf), file.MediaType(buf))
 }
 
-func (client *Client) pinFile(r io.Reader, boundary string) (string, error) {
+func (client *Client) pinFile(r io.Reader, boundary string) (pinners.Result, error) {
 	endpoint := APIUrl + "/upload"
 
 	req, err := http.NewRequest(http.MethodPost, endpoint, r)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Add("Content-Type", boundary)
 	req.Header.Add("Authorization", "Bearer "+client.cfg.Apikey)
 	httpClient := httpretry.NewClient(client.Client)
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf(resp.Status)
+		return nil, fmt.Errorf(resp.Status)
 	}
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var out addEvent
 	if err := json.Unmarshal(data, &out); err != nil {
 		var e *json.SyntaxError
 		if errors.As(err, &e) {
-			return "", fmt.Errorf("json syntax error at byte offset %d", e.Offset)
+			return nil, fmt.Errorf("json syntax error at byte offset %d", e.Offset)
 		}
-		return "", err
+		return nil, err
 	}
 
-	return out.Value.Cid, nil
+	return newResult(out.Value.Cid), nil
 }
 
 // PinHash pins content to NFTStorage by giving an IPFS hash, it returns the result and an error.
@@ -105,11 +106,11 @@ func (client *Client) PinHash(hash string) (bool, error) {
 
 // PinDir pins a directory to the NFT.Storage pinning service.
 // It alias to PinFile.
-func (client *Client) PinDir(name string) (string, error) {
+func (client *Client) PinDir(name string) (pinners.Result, error) {
 	return client.PinFile(name)
 }
 
-func (client *Client) Pin(path interface{}) (cid string, err error) {
+func (client *Client) Pin(path interface{}) (result pinners.Result, err error) {
 	err = fmt.Errorf("unsupported pinner")
 	switch v := path.(type) {
 	case string:
@@ -117,14 +118,14 @@ func (client *Client) Pin(path interface{}) (cid string, err error) {
 		if err != nil {
 			return
 		}
-		cid, err = client.PinFile(v)
+		result, err = client.PinFile(v)
 	case io.Reader:
-		cid, err = client.PinWithReader(v)
+		result, err = client.PinWithReader(v)
 	case []byte:
-		cid, err = client.PinWithBytes(v)
+		result, err = client.PinWithBytes(v)
 	}
 	if err != nil {
 		err = fmt.Errorf("%s: %w", client.Name(), err)
 	}
-	return cid, err
+	return result, err
 }
